@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rubik's Cube Algorithm Tree</title>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: #0f3460;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0b0;
+            --accent: #e94560;
+            --accent-dim: rgba(233, 69, 96, 0.15);
+            --border: #333355;
+            --connector: #555577;
+            --move-R: #ff5555;
+            --move-L: #ff9944;
+            --move-U: #eeee55;
+            --move-D: #aaaaaa;
+            --move-F: #55cc55;
+            --move-B: #5599ff;
+            --move-slice: #cc55cc;
+            --move-rotation: #888899;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 340px 1fr;
+            height: 100vh;
+        }
+
+        @media (max-width: 900px) {
+            .container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr;
+            }
+            .input-panel { max-height: 45vh; overflow-y: auto; }
+        }
+
+        .input-panel {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            overflow-y: auto;
+        }
+
+        .input-panel h1 {
+            font-size: 20px;
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        .input-panel .description {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        textarea {
+            font-family: Consolas, 'SF Mono', 'Menlo', monospace;
+            font-size: 13px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            resize: vertical;
+            min-height: 180px;
+            flex: 1;
+            padding: 10px;
+            line-height: 1.6;
+        }
+
+        textarea::placeholder { color: var(--text-secondary); opacity: 0.6; }
+        textarea:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+
+        .button-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        button {
+            font-family: inherit;
+            font-size: 13px;
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        button:hover { background: var(--accent-dim); border-color: var(--accent); }
+
+        .btn-primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+            font-weight: 600;
+            flex: 1;
+        }
+
+        .btn-primary:hover { background: #c73a52; }
+
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .options label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+        .options input[type="checkbox"] { accent-color: var(--accent); }
+
+        .stats {
+            font-size: 12px;
+            color: var(--text-secondary);
+            padding: 8px 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .tree-panel {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            padding: 10px 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-secondary);
+        }
+
+        .toolbar button { font-size: 12px; padding: 5px 12px; }
+
+        #tree-display {
+            flex: 1;
+            overflow: auto;
+            padding: 20px;
+        }
+
+        .tree-empty {
+            color: var(--text-secondary);
+            font-style: italic;
+            padding: 40px;
+            text-align: center;
+        }
+
+        /* Tree node structure */
+        .tree-node {
+            position: relative;
+            margin-left: 28px;
+        }
+
+        .tree-node.root-level { margin-left: 0; }
+        .tree-node.root-level + .tree-node.root-level { margin-top: 6px; }
+
+        .tree-node.orphan > .node-header {
+            background: rgba(255, 255, 255, 0.04);
+            border-left: 3px solid var(--connector);
+            padding-left: 10px;
+        }
+
+        /* Connector lines */
+        .tree-node:not(.root-level)::before {
+            content: "";
+            position: absolute;
+            left: -16px;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: var(--connector);
+        }
+
+        .tree-node:not(.root-level):last-child::before {
+            bottom: calc(100% - 15px);
+        }
+
+        .tree-node:not(.root-level) > .node-header::before {
+            content: "";
+            position: absolute;
+            left: -16px;
+            top: 14px;
+            width: 14px;
+            height: 1px;
+            background: var(--connector);
+        }
+
+        .node-header {
+            position: relative;
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            cursor: default;
+            line-height: 1.6;
+            flex-wrap: wrap;
+        }
+
+        .node-header:hover { background: var(--accent-dim); }
+
+        .toggle-btn {
+            font-family: monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            user-select: none;
+            width: 16px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .toggle-spacer {
+            width: 16px;
+            flex-shrink: 0;
+            display: inline-block;
+        }
+
+        .alg-name {
+            font-weight: 700;
+            color: var(--accent);
+            white-space: nowrap;
+        }
+
+        .alg-moves {
+            font-family: Consolas, 'SF Mono', 'Menlo', monospace;
+            font-size: 14px;
+            letter-spacing: 0.3px;
+        }
+
+        .alg-setup {
+            font-family: Consolas, 'SF Mono', 'Menlo', monospace;
+            font-size: 14px;
+            opacity: 0.75;
+        }
+
+        .setup-arrow {
+            color: var(--accent);
+            font-weight: bold;
+            font-size: 13px;
+        }
+
+        .alg-parent-ref {
+            font-family: Consolas, 'SF Mono', 'Menlo', monospace;
+            font-size: 14px;
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+
+        .alg-full {
+            font-family: Consolas, 'SF Mono', 'Menlo', monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        .node-children { }
+        .node-children.collapsed { display: none; }
+
+        .cancel-mark {
+            text-decoration: underline wavy var(--accent);
+            text-underline-offset: 3px;
+        }
+
+        /* Move face colors */
+        .mv-R { color: var(--move-R); }
+        .mv-L { color: var(--move-L); }
+        .mv-U { color: var(--move-U); }
+        .mv-D { color: var(--move-D); }
+        .mv-F { color: var(--move-F); }
+        .mv-B { color: var(--move-B); }
+        .mv-M, .mv-E, .mv-S { color: var(--move-slice); }
+        .mv-x, .mv-y, .mv-z { color: var(--move-rotation); }
+        .mv-r, .mv-l, .mv-u, .mv-d, .mv-f, .mv-b { color: var(--move-slice); }
+
+        .tooltip {
+            display: none;
+            position: absolute;
+            left: 40px;
+            top: 100%;
+            z-index: 100;
+            background: #222244;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-size: 12px;
+            white-space: nowrap;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+        }
+
+        .node-header:hover .tooltip { display: block; }
+        .tooltip.tooltip-open { display: block; }
+
+        .tooltip-copy {
+            margin-top: 6px;
+            font-size: 11px;
+            padding: 3px 8px;
+            cursor: pointer;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-secondary);
+        }
+
+        .tooltip-copy:hover { border-color: var(--accent); color: var(--text-primary); }
+
+        .tooltip-row {
+            display: flex;
+            gap: 8px;
+            line-height: 1.6;
+        }
+
+        .tooltip-label { color: var(--text-secondary); }
+        .tooltip-value { color: var(--text-primary); font-family: 'Courier New', monospace; }
+
+        .child-count {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-left: 4px;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <aside class="input-panel">
+            <h1>Algorithm Tree</h1>
+            <p class="description">
+                Enter Rubik's cube algorithms, one per line. Optionally prefix with a name:
+                <code>Name: R U R' U'</code><br>
+                The tool finds which algorithms are setups into others, accounting for move cancellations.
+            </p>
+            <textarea id="alg-input" placeholder="Enter algorithms, one per line&#10;e.g.&#10;Sune: R U R' U R U2 R'&#10;R U R' U R U' R' U R U2 R'&#10;R U R' U'&#10;R' F R F'"></textarea>
+            <div class="button-row">
+                <button class="btn-primary" id="build-btn">Build Tree</button>
+                <button id="example-btn">Load Example</button>
+            </div>
+            <div class="options">
+                <label><input type="checkbox" id="opt-setup" checked> Show setup moves</label>
+                <label><input type="checkbox" id="opt-color" checked> Color-code moves</label>
+                <label><input type="checkbox" id="opt-cancel" checked> Show cancellation marks</label>
+                <label>Max cancellations <input type="number" id="opt-max-cancel" value="2" min="0" max="20" style="width:48px;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:13px;"></label>
+                <label>Child sort <select id="opt-child-sort" style="background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:13px;"><option value="subtree">Subtree size</option><option value="length">Alg length</option></select></label>
+            </div>
+            <div class="stats" id="stats"></div>
+        </aside>
+        <main class="tree-panel">
+            <div class="toolbar">
+                <button id="expand-all">Expand All</button>
+                <button id="collapse-all">Collapse All</button>
+                <button id="toggle-bases">Toggle Base Cases</button>
+                <button id="export-btn">Export</button>
+                <button id="popout-btn">Pop Out</button>
+            </div>
+            <div id="tree-display">
+                <div class="tree-empty">Enter algorithms and click "Build Tree" to visualize.</div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+    // ============================================================
+    // SECTION 1: MOVE REPRESENTATION
+    // ============================================================
+
+    const FACE_CSS = {
+        'R': 'mv-R', 'L': 'mv-L', 'U': 'mv-U', 'D': 'mv-D',
+        'F': 'mv-F', 'B': 'mv-B',
+        'r': 'mv-r', 'l': 'mv-l', 'u': 'mv-u', 'd': 'mv-d',
+        'f': 'mv-f', 'b': 'mv-b',
+        'Rw': 'mv-r', 'Lw': 'mv-l', 'Uw': 'mv-u', 'Dw': 'mv-d',
+        'Fw': 'mv-f', 'Bw': 'mv-b',
+        'M': 'mv-M', 'E': 'mv-E', 'S': 'mv-S',
+        'x': 'mv-x', 'y': 'mv-y', 'z': 'mv-z',
+    };
+
+    // ============================================================
+    // SECTION 2: PARSING
+    // ============================================================
+
+    const MOVE_REGEX = /([RLUDFBrludfb]w?|[MESxyz])([2]?['\u2019]?)/g;
+
+    function parse(str) {
+        // Normalize fancy quotes
+        str = str.replace(/\u2019/g, "'");
+        const moves = [];
+        let m;
+        MOVE_REGEX.lastIndex = 0;
+        while ((m = MOVE_REGEX.exec(str)) !== null) {
+            const face = m[1];
+            const mod = m[2];
+            let amount;
+            if (mod === '' || mod === undefined) {
+                amount = 1;
+            } else if (mod === '2' || mod === "2'") {
+                amount = 2;
+            } else if (mod === "'") {
+                amount = 3;
+            } else {
+                amount = 1;
+            }
+            moves.push({ face, amount });
+        }
+        return moves;
+    }
+
+    function moveToString(move) {
+        const suffix = move.amount === 2 ? '2' : move.amount === 3 ? "'" : '';
+        return move.face + suffix;
+    }
+
+    function algToString(moves) {
+        return moves.map(moveToString).join(' ');
+    }
+
+    // ============================================================
+    // SECTION 3: SIMPLIFICATION
+    // ============================================================
+
+    function simplify(moves) {
+        const stack = [];
+        for (const move of moves) {
+            if (stack.length > 0 && stack[stack.length - 1].face === move.face) {
+                const combined = (stack[stack.length - 1].amount + move.amount) % 4;
+                if (combined === 0) {
+                    stack.pop();
+                } else {
+                    stack[stack.length - 1] = { face: move.face, amount: combined };
+                }
+            } else {
+                stack.push({ face: move.face, amount: move.amount });
+            }
+        }
+        return stack;
+    }
+
+    function invertMoves(moves) {
+        return moves.map(m => ({ face: m.face, amount: (4 - m.amount) % 4 })).reverse();
+    }
+
+    // Compare two move sequences lexicographically: face alphabetically, then amount (1 < 2 < 3)
+    function compareMoves(a, b) {
+        const len = Math.min(a.length, b.length);
+        for (let i = 0; i < len; i++) {
+            const faceCmp = a[i].face.localeCompare(b[i].face);
+            if (faceCmp !== 0) return faceCmp;
+            if (a[i].amount !== b[i].amount) return a[i].amount - b[i].amount;
+        }
+        return a.length - b.length;
+    }
+
+    // ============================================================
+    // SECTION 4: FACTORIZATION
+    // ============================================================
+
+    function computeSetup(algA, algB) {
+        const invB = invertMoves(algB);
+        const combined = algA.concat(invB);
+        return simplify(combined);
+    }
+
+    function movesEqual(a, b) {
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) {
+            if (a[i].face !== b[i].face || a[i].amount !== b[i].amount) return false;
+        }
+        return true;
+    }
+
+    // ============================================================
+    // SECTION 5: TREE BUILDING
+    // ============================================================
+
+    function buildTree(algorithms) {
+        const MAX_CANCELLATIONS = parseInt($('opt-max-cancel').value) || 2;
+        const nodes = algorithms.map(alg => ({
+            alg,
+            children: [],
+            setup: null,
+            parent: null,
+            cancellations: 0,
+        }));
+
+        const root = {
+            alg: { original: '', moves: [], name: '(identity)' },
+            children: [],
+            setup: null,
+            parent: null,
+            cancellations: 0,
+        };
+
+        // For each algorithm, find the best parent
+        for (let i = 0; i < nodes.length; i++) {
+            let bestParentIdx = -1;
+            let bestSetup = null;
+            let bestExplained = 0;
+
+            for (let j = 0; j < nodes.length; j++) {
+                if (i === j) continue;
+                // Parent must be strictly shorter
+                if (nodes[j].alg.moves.length >= nodes[i].alg.moves.length) continue;
+
+                const setup = computeSetup(nodes[i].alg.moves, nodes[j].alg.moves);
+                const explained = nodes[i].alg.moves.length - setup.length;
+                const cancellations = setup.length + nodes[j].alg.moves.length - nodes[i].alg.moves.length;
+
+                // Reject factorizations with too many cancellations
+                if (cancellations > MAX_CANCELLATIONS) continue;
+
+                if (explained > bestExplained) {
+                    bestExplained = explained;
+                    bestParentIdx = j;
+                    bestSetup = setup;
+                }
+            }
+
+            if (bestParentIdx >= 0 && bestExplained > 0) {
+                nodes[i].parent = nodes[bestParentIdx];
+                nodes[i].setup = bestSetup;
+                nodes[i].cancellations = bestSetup.length + nodes[bestParentIdx].alg.moves.length - nodes[i].alg.moves.length;
+                nodes[bestParentIdx].children.push(nodes[i]);
+            } else {
+                nodes[i].parent = root;
+                root.children.push(nodes[i]);
+            }
+        }
+
+        // Sort root level by most direct children first, then alphabetically by moves
+        root.children.sort((a, b) => {
+            const countDiff = b.children.length - a.children.length;
+            if (countDiff !== 0) return countDiff;
+            return compareMoves(a.alg.moves, b.alg.moves);
+        });
+
+        // Sort children within subtrees based on mode
+        const childSortMode = $('opt-child-sort').value;
+        if (childSortMode === 'length') {
+            // Flatten each root child's subtree into a flat list sorted by alg length
+            for (const rootChild of root.children) {
+                const flat = [];
+                function collectAll(n) {
+                    for (const child of n.children) {
+                        flat.push(child);
+                        collectAll(child);
+                    }
+                }
+                collectAll(rootChild);
+                // Clear nested children — all become direct children of rootChild
+                for (const node of flat) node.children = [];
+                flat.sort((a, b) => {
+                    const lenDiff = a.alg.moves.length - b.alg.moves.length;
+                    if (lenDiff !== 0) return lenDiff;
+                    return compareMoves(a.alg.moves, b.alg.moves);
+                });
+                rootChild.children = flat;
+            }
+        } else {
+            // Subtree size mode: recursively sort by descendant count
+            function sortChildren(node) {
+                if (node.children.length === 0) return;
+                node.children.sort((a, b) => {
+                    const countDiff = countDescendants(b) - countDescendants(a);
+                    if (countDiff !== 0) return countDiff;
+                    return compareMoves(a.alg.moves, b.alg.moves);
+                });
+                for (const child of node.children) sortChildren(child);
+            }
+            for (const child of root.children) sortChildren(child);
+        }
+
+        return root;
+    }
+
+    // ============================================================
+    // SECTION 6: RENDERING
+    // ============================================================
+
+    function countDescendants(node) {
+        let count = node.children.length;
+        for (const child of node.children) count += countDescendants(child);
+        return count;
+    }
+
+    const $ = id => document.getElementById(id);
+
+    function getOptions() {
+        return {
+            showSetup: $('opt-setup').checked,
+            colorMoves: $('opt-color').checked,
+            showCancel: $('opt-cancel').checked,
+        };
+    }
+
+    function colorMoveSpan(move, extraClass) {
+        const opts = getOptions();
+        const cls = opts.colorMoves ? (FACE_CSS[move.face] || '') : '';
+        const allCls = [cls, extraClass || ''].filter(Boolean).join(' ');
+        return `<span class="${allCls}">${moveToString(move)}</span>`;
+    }
+
+    function colorMovesHtml(moves) {
+        return moves.map(m => colorMoveSpan(m)).join(' ');
+    }
+
+    function renderTree(root, container) {
+        container.innerHTML = '';
+
+        if (root.children.length === 0) {
+            container.innerHTML = '<div class="tree-empty">No algorithms to display. Enter algorithms and click "Build Tree".</div>';
+            return;
+        }
+
+        for (const child of root.children) {
+            container.appendChild(renderNode(child, true));
+        }
+    }
+
+    function renderNode(node, isRootLevel) {
+        const wrapper = document.createElement('div');
+        const isOrphan = isRootLevel && node.children.length === 0;
+        wrapper.className = 'tree-node' + (isRootLevel ? ' root-level' : '') + (isOrphan ? ' orphan' : '');
+
+        const header = document.createElement('div');
+        header.className = 'node-header';
+
+        // Toggle button
+        if (node.children.length > 0) {
+            const toggle = document.createElement('span');
+            toggle.className = 'toggle-btn';
+            toggle.textContent = '\u25BC';
+            toggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const childContainer = wrapper.querySelector(':scope > .node-children');
+                if (childContainer) {
+                    const collapsed = childContainer.classList.toggle('collapsed');
+                    toggle.textContent = collapsed ? '\u25B6' : '\u25BC';
+                }
+            });
+            header.appendChild(toggle);
+        } else {
+            const spacer = document.createElement('span');
+            spacer.className = 'toggle-spacer';
+            header.appendChild(spacer);
+        }
+
+        const opts = getOptions();
+
+        // Algorithm name
+        if (node.alg.name) {
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'alg-name';
+            nameSpan.textContent = node.alg.name;
+            header.appendChild(nameSpan);
+        }
+
+        // Content depends on whether this node has a parent factorization
+        if (node.setup !== null && node.parent && node.parent.alg.moves.length > 0 && opts.showSetup) {
+            // Show: [setup] -> [parent name/alg] = [full alg]
+            if (node.setup.length > 0) {
+                const setupSpan = document.createElement('span');
+                setupSpan.className = 'alg-setup';
+                // Mark cancellation boundary on last move of setup
+                if (opts.showCancel && node.cancellations > 0) {
+                    const setupMoves = node.setup.map((m, idx) =>
+                        idx === node.setup.length - 1 ? colorMoveSpan(m, 'cancel-mark') : colorMoveSpan(m)
+                    ).join(' ');
+                    setupSpan.innerHTML = setupMoves;
+                } else {
+                    setupSpan.innerHTML = colorMovesHtml(node.setup);
+                }
+                header.appendChild(setupSpan);
+            }
+
+            const arrow = document.createElement('span');
+            arrow.className = 'setup-arrow';
+            arrow.textContent = node.setup.length > 0 ? ' \u2192 ' : '';
+            header.appendChild(arrow);
+
+            const parentRef = document.createElement('span');
+            parentRef.className = 'alg-parent-ref';
+            parentRef.textContent = node.parent.alg.name || algToString(node.parent.alg.moves);
+            header.appendChild(parentRef);
+
+            const full = document.createElement('span');
+            full.className = 'alg-full';
+            full.textContent = ' = ' + algToString(node.alg.moves);
+            header.appendChild(full);
+        } else {
+            // Just show the algorithm moves
+            const movesSpan = document.createElement('span');
+            movesSpan.className = 'alg-moves';
+            movesSpan.innerHTML = colorMovesHtml(node.alg.moves);
+            header.appendChild(movesSpan);
+        }
+
+        // Tooltip
+        const tooltip = document.createElement('div');
+        tooltip.className = 'tooltip';
+        const tipRows = [];
+        tipRows.push(tooltipRow('Algorithm', algToString(node.alg.moves)));
+        tipRows.push(tooltipRow('Moves', String(node.alg.moves.length)));
+        if (node.setup !== null && node.parent && node.parent.alg.moves.length > 0) {
+            tipRows.push(tooltipRow('Setup', node.setup.length > 0 ? algToString(node.setup) : '(none)'));
+            tipRows.push(tooltipRow('Base case', node.parent.alg.name || algToString(node.parent.alg.moves)));
+            if (node.cancellations > 0) {
+                tipRows.push(tooltipRow('Cancellations', String(node.cancellations)));
+            }
+        }
+        if (node.children.length > 0) {
+            const total = countDescendants(node);
+            if (total !== node.children.length) {
+                tipRows.push(tooltipRow('Direct children', String(node.children.length)));
+                tipRows.push(tooltipRow('Total descendants', String(total)));
+            } else {
+                tipRows.push(tooltipRow('Children', String(node.children.length)));
+            }
+        }
+        tooltip.innerHTML = tipRows.join('');
+        const invAlgStr = algToString(invertMoves(node.alg.moves)).replace(/ /g, '');
+        const cubeImg = document.createElement('img');
+        cubeImg.src = `https://visualcube.api.cubing.net/?fmt=svg&size=500&bg=t&stage=vh&alg=${encodeURIComponent(invAlgStr)}`;
+        cubeImg.style.cssText = 'display:block;margin:8px auto 4px;width:200px;height:200px;';
+        cubeImg.alt = 'Cube state';
+        tooltip.appendChild(cubeImg);
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'tooltip-copy';
+        copyBtn.textContent = 'Copy';
+        copyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const text = tipRows.map(r => r.replace(/<[^>]*>/g, '').replace(/&rarr;/g, '→')).join('\n');
+            navigator.clipboard.writeText(text).then(() => {
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => copyBtn.textContent = 'Copy', 1500);
+            });
+        });
+        tooltip.appendChild(copyBtn);
+        header.appendChild(tooltip);
+
+        // Child count badge (total descendants)
+        if (node.children.length > 0) {
+            const total = countDescendants(node);
+            const countSpan = document.createElement('span');
+            countSpan.className = 'child-count';
+            countSpan.textContent = `(${total})`;
+            header.appendChild(countSpan);
+        }
+
+        // "Copy all" button for root-level base cases
+        if (isRootLevel && node.children.length > 0) {
+            const copyAllBtn = document.createElement('button');
+            copyAllBtn.className = 'tooltip-copy';
+            copyAllBtn.textContent = 'Copy all';
+            copyAllBtn.style.marginLeft = '6px';
+            copyAllBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const lines = [algToString(node.alg.moves)];
+                function collectChildren(n) {
+                    for (const child of n.children) {
+                        lines.push(algToString(child.alg.moves));
+                        collectChildren(child);
+                    }
+                }
+                collectChildren(node);
+                navigator.clipboard.writeText(lines.join('\n')).then(() => {
+                    copyAllBtn.textContent = 'Copied!';
+                    setTimeout(() => copyAllBtn.textContent = 'Copy all', 1500);
+                });
+            });
+            header.appendChild(copyAllBtn);
+        }
+
+        // Tap to toggle tooltip on mobile
+        header.addEventListener('click', (e) => {
+            if (e.target.closest('.toggle-btn') || e.target.closest('.tooltip-copy') || e.target.closest('button')) return;
+            // Close any other open tooltips
+            document.querySelectorAll('.tooltip-open').forEach(t => {
+                if (t !== tooltip) t.classList.remove('tooltip-open');
+            });
+            tooltip.classList.toggle('tooltip-open');
+        });
+
+        wrapper.appendChild(header);
+
+        // Children
+        if (node.children.length > 0) {
+            const childContainer = document.createElement('div');
+            childContainer.className = 'node-children';
+            for (const child of node.children) {
+                childContainer.appendChild(renderNode(child, false));
+            }
+            wrapper.appendChild(childContainer);
+        }
+
+        return wrapper;
+    }
+
+    function tooltipRow(label, value) {
+        return `<div class="tooltip-row"><span class="tooltip-label">${label}:</span> <span class="tooltip-value">${value}</span></div>`;
+    }
+
+    // ============================================================
+    // SECTION 7: UI EVENT HANDLERS
+    // ============================================================
+
+    let currentRoot = null;
+
+    function handleBuild() {
+        const input = $('alg-input').value;
+        const lines = input.split('\n');
+        const algorithms = [];
+        const seen = new Map();
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            let name = null;
+            let algStr = trimmed;
+
+            // Check for "name: alg" format — but only if what's before `:` looks like a name
+            // (not a single move letter like R: which would be ambiguous)
+            const colonIdx = trimmed.indexOf(':');
+            if (colonIdx > 0) {
+                const potentialName = trimmed.substring(0, colonIdx).trim();
+                const potentialAlg = trimmed.substring(colonIdx + 1).trim();
+                // Only treat as name if the part before colon contains spaces or is >2 chars
+                // (to avoid treating "R: ..." as name "R")
+                if (potentialName.length > 2 || potentialName.includes(' ')) {
+                    name = potentialName;
+                    algStr = potentialAlg;
+                }
+            }
+
+            let moves = simplify(parse(algStr));
+            // Strip leading U/U'/U2 move (AUF pre-move, not part of the algorithm)
+            if (moves.length > 0 && moves[0].face === 'U') {
+                moves = moves.slice(1);
+            }
+            if (moves.length === 0) continue;
+
+            const key = algToString(moves);
+            if (seen.has(key)) {
+                // Merge name if the existing one doesn't have one
+                if (name && !seen.get(key).name) {
+                    seen.get(key).name = name;
+                }
+                continue;
+            }
+
+            const alg = { original: algStr, moves, name };
+            seen.set(key, alg);
+            algorithms.push(alg);
+        }
+
+        if (algorithms.length === 0) {
+            $('tree-display').innerHTML = '<div class="tree-empty">No valid algorithms found. Enter algorithms one per line.</div>';
+            $('stats').textContent = '';
+            currentRoot = null;
+            return;
+        }
+
+        currentRoot = buildTree(algorithms);
+        renderTree(currentRoot, $('tree-display'));
+
+        // Stats
+        const totalNodes = algorithms.length;
+        const baseCases = currentRoot.children.filter(c => c.children.length > 0).length;
+        const isolates = currentRoot.children.filter(c => c.children.length === 0).length;
+        const factored = totalNodes - currentRoot.children.length;
+        $('stats').textContent = `${totalNodes} algorithms \u2022 ${baseCases} base cases \u2022 ${factored} factored \u2022 ${isolates} isolates`;
+    }
+
+    function loadExample() {
+        $('alg-input').value = `Sexy Move: R U R' U'
+Sledgehammer: R' F R F'
+Sune: R U R' U R U2 R'
+Anti-Sune: R U2 R' U' R U' R'
+Double Sune: R U R' U R U' R' U R U2 R'
+OLL 33: R U R' U' R' F R F'
+OLL 37: F R U' R' U' R U R' F'
+Fat Sune: r U R' U R U2 r'
+Niklas: R U' L' U R' U' L
+OLL 44: F U R U' R' F'
+Back Sexy: R U R' U' R' F R F' U R U' R' F' U F
+Allan: R U R' U R U' R' U R U2 R' U R U R' U R U2 R'`;
+        localStorage.setItem('algtree-input', $('alg-input').value);
+        handleBuild();
+    }
+
+    function expandAll() {
+        document.querySelectorAll('.node-children.collapsed').forEach(el => {
+            el.classList.remove('collapsed');
+        });
+        document.querySelectorAll('.toggle-btn').forEach(el => {
+            el.textContent = '\u25BC';
+        });
+    }
+
+    function collapseAll() {
+        document.querySelectorAll('.node-children').forEach(el => {
+            el.classList.add('collapsed');
+        });
+        document.querySelectorAll('.toggle-btn').forEach(el => {
+            el.textContent = '\u25B6';
+        });
+    }
+
+    function toggleBaseCases() {
+        // Toggle only the root-level nodes (base cases)
+        document.querySelectorAll('.tree-node.root-level > .node-children').forEach(el => {
+            const collapsed = el.classList.toggle('collapsed');
+            const toggle = el.parentElement.querySelector(':scope > .node-header > .toggle-btn');
+            if (toggle) toggle.textContent = collapsed ? '\u25B6' : '\u25BC';
+        });
+    }
+
+    function exportTree() {
+        if (!currentRoot || currentRoot.children.length === 0) return;
+
+        const baseCases = currentRoot.children.filter(c => c.children.length > 0);
+        const isolates = currentRoot.children.filter(c => c.children.length === 0);
+        const sections = [];
+
+        for (const node of baseCases) {
+            const total = countDescendants(node);
+            const nameStr = node.alg.name ? ` (${node.alg.name})` : '';
+            const header = `--- ${algToString(node.alg.moves)}${nameStr} [${total} descendants] ---`;
+            const lines = [header, algToString(node.alg.moves)];
+            function collect(n) {
+                for (const child of n.children) {
+                    lines.push(algToString(child.alg.moves));
+                    collect(child);
+                }
+            }
+            collect(node);
+            sections.push(lines.join('\n'));
+        }
+
+        if (isolates.length > 0) {
+            const lines = ['--- Isolates ---'];
+            for (const node of isolates) {
+                lines.push(algToString(node.alg.moves));
+            }
+            sections.push(lines.join('\n'));
+        }
+
+        const text = sections.join('\n\n');
+        const btn = $('export-btn');
+        navigator.clipboard.writeText(text).then(() => {
+            btn.textContent = 'Copied!';
+            setTimeout(() => btn.textContent = 'Export', 1500);
+        });
+    }
+
+    function popoutTree() {
+        const treeHtml = $('tree-display').innerHTML;
+        if (!treeHtml || !currentRoot) return;
+        const styles = document.querySelector('style').textContent;
+        const page = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Algorithm Tree</title>
+<style>${styles}
+body { overflow: auto; height: auto; }
+.tree-panel { height: auto; overflow: visible; }
+#tree-display { padding: 16px; }
+</style></head><body style="background:var(--bg-primary);color:var(--text-primary);">
+<div id="tree-display">${treeHtml}</div>
+<script>
+document.querySelectorAll('.toggle-btn').forEach(toggle => {
+    toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const wrapper = toggle.closest('.tree-node');
+        const childContainer = wrapper.querySelector(':scope > .node-children');
+        if (childContainer) {
+            const collapsed = childContainer.classList.toggle('collapsed');
+            toggle.textContent = collapsed ? '\\u25B6' : '\\u25BC';
+        }
+    });
+});
+document.querySelectorAll('.node-header').forEach(header => {
+    header.addEventListener('click', (e) => {
+        if (e.target.closest('.toggle-btn') || e.target.closest('.tooltip-copy') || e.target.closest('button')) return;
+        const tip = header.querySelector('.tooltip');
+        if (!tip) return;
+        document.querySelectorAll('.tooltip-open').forEach(t => { if (t !== tip) t.classList.remove('tooltip-open'); });
+        tip.classList.toggle('tooltip-open');
+    });
+});
+<\/script></body></html>`;
+        const w = window.open('', '_blank');
+        if (w) {
+            w.document.write(page);
+            w.document.close();
+        }
+    }
+
+    // Re-render when options change
+    function handleOptionChange() {
+        if (currentRoot) {
+            renderTree(currentRoot, $('tree-display'));
+        }
+    }
+
+    // ============================================================
+    // SECTION 8: INITIALIZATION
+    // ============================================================
+
+    document.addEventListener('DOMContentLoaded', () => {
+        $('build-btn').addEventListener('click', handleBuild);
+        $('example-btn').addEventListener('click', loadExample);
+        $('expand-all').addEventListener('click', expandAll);
+        $('collapse-all').addEventListener('click', collapseAll);
+        $('toggle-bases').addEventListener('click', toggleBaseCases);
+        $('export-btn').addEventListener('click', exportTree);
+        $('popout-btn').addEventListener('click', popoutTree);
+        // Save settings on change
+        const SETTINGS_KEY = 'algtree-settings';
+        function saveSettings() {
+            const settings = {
+                setup: $('opt-setup').checked,
+                color: $('opt-color').checked,
+                cancel: $('opt-cancel').checked,
+                maxCancel: $('opt-max-cancel').value,
+                childSort: $('opt-child-sort').value,
+            };
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+        }
+
+        $('opt-setup').addEventListener('change', () => { saveSettings(); handleOptionChange(); });
+        $('opt-color').addEventListener('change', () => { saveSettings(); handleOptionChange(); });
+        $('opt-cancel').addEventListener('change', () => { saveSettings(); handleOptionChange(); });
+        $('opt-max-cancel').addEventListener('change', () => { saveSettings(); handleBuild(); });
+        $('opt-child-sort').addEventListener('change', () => { saveSettings(); handleBuild(); });
+
+        // Restore saved settings
+        const savedSettings = localStorage.getItem(SETTINGS_KEY);
+        if (savedSettings) {
+            try {
+                const s = JSON.parse(savedSettings);
+                if (s.setup !== undefined) $('opt-setup').checked = s.setup;
+                if (s.color !== undefined) $('opt-color').checked = s.color;
+                if (s.cancel !== undefined) $('opt-cancel').checked = s.cancel;
+                if (s.maxCancel !== undefined) $('opt-max-cancel').value = s.maxCancel;
+                if (s.childSort !== undefined) $('opt-child-sort').value = s.childSort;
+            } catch (e) {}
+        }
+
+        // Restore saved input
+        const saved = localStorage.getItem('algtree-input');
+        if (saved) {
+            $('alg-input').value = saved;
+            handleBuild();
+        }
+
+        // Save input on change
+        $('alg-input').addEventListener('input', () => {
+            localStorage.setItem('algtree-input', $('alg-input').value);
+        });
+
+        // Build on Ctrl+Enter in textarea
+        $('alg-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                handleBuild();
+            }
+        });
+    });
+    </script>
+</body>
+</html>
